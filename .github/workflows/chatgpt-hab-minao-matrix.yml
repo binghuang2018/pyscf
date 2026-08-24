@@ -1,0 +1,108 @@
+name: ChatGPT H_AB MINAO matrix validation
+
+on:
+  push:
+    branches:
+      - chatgpt/hab-minao-validation-20260825
+    paths:
+      - .github/workflows/chatgpt-hab-minao-matrix.yml
+      - chatgpt_hab_validation/pair_worker.py
+      - chatgpt_hab_validation/aggregate_matrix.py
+      - chatgpt_hab_validation/run_validation_fast.py
+
+permissions:
+  contents: write
+
+env:
+  OMP_NUM_THREADS: '2'
+  MKL_NUM_THREADS: '2'
+  OPENBLAS_NUM_THREADS: '2'
+  NUMEXPR_NUM_THREADS: '2'
+
+jobs:
+  calculate:
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        include:
+          - {tag: H_H, a: H, b: H, r: 0.7414}
+          - {tag: H_F, a: H, b: F, r: 0.9168}
+          - {tag: H_Cl, a: H, b: Cl, r: 1.2746}
+          - {tag: H_Br, a: H, b: Br, r: 1.4144}
+          - {tag: H_I, a: H, b: I, r: 1.6090}
+          - {tag: F_F, a: F, b: F, r: 1.4119}
+          - {tag: F_Cl, a: F, b: Cl, r: 1.6280}
+          - {tag: F_Br, a: F, b: Br, r: 1.7580}
+          - {tag: F_I, a: F, b: I, r: 1.9100}
+          - {tag: Cl_Cl, a: Cl, b: Cl, r: 1.9879}
+          - {tag: Cl_Br, a: Cl, b: Br, r: 2.1360}
+          - {tag: Cl_I, a: Cl, b: I, r: 2.3210}
+          - {tag: Br_Br, a: Br, b: Br, r: 2.2810}
+          - {tag: Br_I, a: Br, b: I, r: 2.4690}
+          - {tag: I_I, a: I, b: I, r: 2.6660}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/hab-minao-validation-20260825
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install PySCF
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy<2.4' scipy pandas tabulate pyscf==2.14.0
+      - name: Calculate ${{ matrix.a }}-${{ matrix.b }}
+        run: |
+          mkdir -p pair_payloads
+          python chatgpt_hab_validation/pair_worker.py --a '${{ matrix.a }}' --b '${{ matrix.b }}' --r '${{ matrix.r }}' --basis minao --output 'pair_payloads/${{ matrix.tag }}.pkl'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pair-${{ matrix.tag }}
+          path: pair_payloads/${{ matrix.tag }}.pkl
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate:
+    needs: calculate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/hab-minao-validation-20260825
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install aggregation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy<2.4' scipy pandas tabulate pyscf==2.14.0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pair-*
+          path: pair_results
+          merge-multiple: true
+      - name: Aggregate all 15 calculations
+        run: |
+          rm -rf chatgpt_hab_validation/matrix_results
+          python chatgpt_hab_validation/aggregate_matrix.py --input pair_results --output chatgpt_hab_validation/matrix_results
+          printf 'completed %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > chatgpt_hab_validation/matrix_status.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hab-minao-matrix-results
+          path: chatgpt_hab_validation/matrix_results
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit aggregated results
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add chatgpt_hab_validation/matrix_results chatgpt_hab_validation/matrix_status.txt
+          git commit -m 'Store parallel MINAO validation results [skip ci]'
+          git pull --rebase origin chatgpt/hab-minao-validation-20260825
+          git push origin HEAD:chatgpt/hab-minao-validation-20260825
