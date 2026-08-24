@@ -5,11 +5,11 @@ on:
     branches:
       - chatgpt/hab-minao-validation-20260825
     paths:
-      - chatgpt_hab_validation/**
+      - chatgpt_hab_validation/run_validation.py
       - .github/workflows/chatgpt-hab-minao.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/hab-minao-validation-20260825
 
       - uses: actions/setup-python@v5
         with:
@@ -35,6 +37,7 @@ jobs:
           OPENBLAS_NUM_THREADS: '2'
           NUMEXPR_NUM_THREADS: '2'
         run: |
+          rm -rf chatgpt_hab_validation/results
           python chatgpt_hab_validation/run_validation.py --basis minao --output chatgpt_hab_validation/results
 
       - name: Upload numerical results
@@ -44,3 +47,11 @@ jobs:
           path: chatgpt_hab_validation/results
           if-no-files-found: error
           retention-days: 30
+
+      - name: Commit results to isolated branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add chatgpt_hab_validation/results
+          git commit -m 'Store MINAO validation results [skip ci]' || exit 0
+          git push origin HEAD:chatgpt/hab-minao-validation-20260825
