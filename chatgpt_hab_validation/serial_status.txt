@@ -1,1 +1,1 @@
-run_id=32762611093 status=started time=2026-08-24T18:28:31Z
+run_id=32762611093 status=completed exit_code=0 time=2026-08-24T18:29:11Z
