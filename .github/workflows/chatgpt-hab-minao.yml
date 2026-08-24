@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/chatgpt-hab-minao.yml
       - chatgpt_hab_validation/run_validation_fast.py
+      - chatgpt_hab_validation/run_validation_ecp.py
   workflow_dispatch:
 
 permissions:
@@ -53,6 +54,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install 'numpy<2.4' scipy pandas tabulate pyscf==2.14.0
 
+      - name: Preflight iodine MINAO/ECP electron count
+        run: |
+          python - <<'PY'
+          from pyscf import gto
+          mol = gto.M(
+              atom=[('H',(0,0,0)),('I',(0,0,1.6090))],
+              unit='Angstrom', basis='minao', ecp={'I':'def2-svp'},
+              charge=0, spin=0, symmetry=False, verbose=0)
+          print('HI: nelectron=', mol.nelectron, 'nao=', mol.nao_nr(),
+                'I-core=', mol.atom_nelec_core(1))
+          assert mol.atom_nelec_core(1) == 28
+          assert mol.nelectron == 26
+          assert mol.nao_nr() == 14
+          PY
+
       - name: Run all 15 RHF/MINAO diatomics
         id: calculate
         env:
@@ -64,7 +80,7 @@ jobs:
           rm -rf chatgpt_hab_validation/results
           mkdir -p chatgpt_hab_validation/results
           set +e
-          python chatgpt_hab_validation/run_validation_fast.py \
+          python chatgpt_hab_validation/run_validation_ecp.py \
             --basis minao \
             --output chatgpt_hab_validation/results \
             2>&1 | tee chatgpt_hab_validation/results/run.log
