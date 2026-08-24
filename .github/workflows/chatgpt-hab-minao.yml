@@ -1,0 +1,46 @@
+name: ChatGPT H_AB MINAO validation
+
+on:
+  push:
+    branches:
+      - chatgpt/hab-minao-validation-20260825
+    paths:
+      - chatgpt_hab_validation/**
+      - .github/workflows/chatgpt-hab-minao.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install numerical stack and PySCF
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy<2.4' scipy pandas tabulate pyscf==2.14.0
+
+      - name: Run RHF/MINAO validation
+        env:
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'
+          NUMEXPR_NUM_THREADS: '2'
+        run: |
+          python chatgpt_hab_validation/run_validation.py --basis minao --output chatgpt_hab_validation/results
+
+      - name: Upload numerical results
+        uses: actions/upload-artifact@v4
+        with:
+          name: hab-minao-validation-results
+          path: chatgpt_hab_validation/results
+          if-no-files-found: error
+          retention-days: 30
