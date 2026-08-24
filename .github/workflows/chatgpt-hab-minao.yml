@@ -4,9 +4,7 @@ on:
   push:
     branches:
       - chatgpt/hab-minao-validation-20260825
-    paths:
-      - chatgpt_hab_validation/run_validation_fast.py
-      - .github/workflows/chatgpt-hab-minao.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,6 +21,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: chatgpt/hab-minao-validation-20260825
+
+      - name: Mark fast run as started
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf 'fast-started %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > chatgpt_hab_validation/ci_status.txt
+          git add chatgpt_hab_validation/ci_status.txt
+          git commit -m 'Mark fast MINAO validation started [skip ci]' || true
+          git push origin HEAD:chatgpt/hab-minao-validation-20260825
 
       - uses: actions/setup-python@v5
         with:
