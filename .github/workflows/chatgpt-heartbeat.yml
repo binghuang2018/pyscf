@@ -1,0 +1,23 @@
+name: ChatGPT workflow heartbeat
+on:
+  push:
+    branches:
+      - chatgpt/hab-minao-validation-20260825
+    paths:
+      - .github/workflows/chatgpt-heartbeat.yml
+permissions:
+  contents: write
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/hab-minao-validation-20260825
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf 'heartbeat %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > chatgpt_hab_validation/heartbeat.txt
+          git add chatgpt_hab_validation/heartbeat.txt
+          git commit -m 'Workflow heartbeat [skip ci]'
+          git push origin HEAD:chatgpt/hab-minao-validation-20260825
