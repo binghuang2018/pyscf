@@ -12,8 +12,29 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: chatgpt-hab-minao-serial
+  cancel-in-progress: true
+
 jobs:
+  mark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/hab-minao-validation-20260825
+      - name: Record run identifier
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf 'run_id=%s status=started time=%s\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > chatgpt_hab_validation/serial_status.txt
+          git add chatgpt_hab_validation/serial_status.txt
+          git commit -m 'Mark serial MINAO validation started [skip ci]' || true
+          git pull --rebase origin chatgpt/hab-minao-validation-20260825
+          git push origin HEAD:chatgpt/hab-minao-validation-20260825
+
   validate:
+    needs: mark
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -34,6 +55,7 @@ jobs:
           python -m pip install 'numpy<2.4' scipy pandas tabulate pyscf==2.14.0
 
       - name: Run all 15 RHF/MINAO diatomics
+        id: calculate
         env:
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
@@ -41,30 +63,47 @@ jobs:
           NUMEXPR_NUM_THREADS: '2'
         run: |
           rm -rf chatgpt_hab_validation/results
+          mkdir -p chatgpt_hab_validation/results
+          set +e
           python chatgpt_hab_validation/run_validation_fast.py \
             --basis minao \
-            --output chatgpt_hab_validation/results
+            --output chatgpt_hab_validation/results \
+            2>&1 | tee chatgpt_hab_validation/results/run.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Print technical report
         if: always()
         run: |
           if test -f chatgpt_hab_validation/results/report.md; then
             cat chatgpt_hab_validation/results/report.md
+          else
+            tail -n 200 chatgpt_hab_validation/results/run.log || true
           fi
 
       - name: Upload complete numerical output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hab-minao-validation
+          name: hab-minao-validation-${{ github.run_id }}
           path: chatgpt_hab_validation/results
           if-no-files-found: warn
+          retention-days: 30
 
-      - name: Commit successful results to isolated branch
-        if: success()
+      - name: Commit results and terminal status
+        if: always()
         run: |
+          code='${{ steps.calculate.outputs.exit_code }}'
+          if test "$code" = '0'; then state=completed; else state=failed; fi
+          printf 'run_id=%s status=%s exit_code=%s time=%s\n' "$GITHUB_RUN_ID" "$state" "$code" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > chatgpt_hab_validation/serial_status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add chatgpt_hab_validation/results
-          git commit -m 'Add PySCF/MINAO H_AB validation results' || exit 0
+          git add chatgpt_hab_validation/results chatgpt_hab_validation/serial_status.txt
+          git commit -m "Store serial MINAO validation outcome: $state [skip ci]" || exit 0
+          git pull --rebase origin chatgpt/hab-minao-validation-20260825
           git push origin HEAD:chatgpt/hab-minao-validation-20260825
+
+      - name: Fail workflow when calculation failed
+        if: steps.calculate.outputs.exit_code != '0'
+        run: exit 1
