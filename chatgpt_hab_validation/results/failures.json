@@ -1,0 +1,22 @@
+[
+  {
+    "pair": "H-I",
+    "error": "RuntimeError('Failed to assign mo_occ. Nocc (27) > Nmo (14)')"
+  },
+  {
+    "pair": "F-I",
+    "error": "RuntimeError('Failed to assign mo_occ. Nocc (31) > Nmo (18)')"
+  },
+  {
+    "pair": "Cl-I",
+    "error": "RuntimeError('Failed to assign mo_occ. Nocc (35) > Nmo (22)')"
+  },
+  {
+    "pair": "Br-I",
+    "error": "RuntimeError('Failed to assign mo_occ. Nocc (44) > Nmo (31)')"
+  },
+  {
+    "pair": "I-I",
+    "error": "RuntimeError('Failed to assign mo_occ. Nocc (53) > Nmo (26)')"
+  }
+]
